@@ -19,16 +19,28 @@ import streamlit as st
 st.set_page_config(page_title="Superstore Sales Dashboard", page_icon="📊", layout="wide")
 
 DATA_PATH = Path(__file__).parent / "data" / "superstore_clean.csv"
-C_PRIMARY, C_ACCENT, C_POS, C_NEG = "#1f4e79", "#f28e2b", "#2a9d8f", "#e63946"
-CAT_COLORS = {"Furniture": "#1f4e79", "Office Supplies": "#f28e2b", "Technology": "#2a9d8f"}
-TEMPLATE = "plotly_white"
+C_PRIMARY, C_ACCENT, C_POS, C_NEG = "#2dd4bf", "#fbbf24", "#2dd4bf", "#fb7185"
+CAT_COLORS = {"Furniture": "#818cf8", "Office Supplies": "#fbbf24", "Technology": "#2dd4bf"}
+DIV_SCALE = [[0, "#fb7185"], [0.5, "#1e293b"], [1, "#2dd4bf"]]  # merah (rugi) - netral - teal (profit)
+KPI_COLORS = ["#2dd4bf", "#fbbf24", "#818cf8", "#38bdf8", "#f472b6", "#fb923c"]
+TEMPLATE = "plotly_dark"
 
 st.markdown(
     """
     <style>
-    .block-container {padding-top: 1.5rem;}
-    .insight-box {background:#f4f8fc; border-left:5px solid #1f4e79; padding:.7rem 1rem;
-                  border-radius:6px; margin-bottom:.45rem; color:#1b2a3a;}
+    .block-container {padding-top: 1.2rem; max-width: 1400px;}
+    .hero {background: linear-gradient(120deg, #0f766e 0%, #1d4ed8 55%, #6d28d9 100%);
+           padding: 1.4rem 1.7rem; border-radius: 16px; margin-bottom: 1rem;
+           box-shadow: 0 8px 24px rgba(0,0,0,.35);}
+    .hero-title {font-size: 2rem; font-weight: 800; color: #ffffff; line-height: 1.2;}
+    .hero-sub {margin-top: .35rem; color: #dbeafe; font-size: .95rem;}
+    .hero-by {margin-top: .7rem; font-size: .82rem; color: #e0e7ff; opacity: .95;}
+    .kpi {background: #131c2e; border: 1px solid #243049; border-top: 3px solid var(--c);
+          border-radius: 12px; padding: .8rem 1rem; margin-bottom: .5rem;}
+    .kpi-label {color: #94a3b8; font-size: .8rem;}
+    .kpi-value {color: #f8fafc; font-size: 1.65rem; font-weight: 700;}
+    .insight-box {background: #131c2e; border-left: 4px solid #2dd4bf; padding: .65rem 1rem;
+                  border-radius: 8px; margin-bottom: .45rem; color: #e2e8f0;}
     </style>
     """,
     unsafe_allow_html=True,
@@ -41,7 +53,10 @@ def usd(x: float) -> str:
 
 def style(fig: go.Figure, height: int = 380) -> go.Figure:
     fig.update_layout(template=TEMPLATE, height=height, margin=dict(l=10, r=10, t=50, b=10),
-                      title_font_size=16, legend_title_text="")
+                      title_font_size=16, legend_title_text="",
+                      paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+    fig.update_xaxes(gridcolor="#243049", zerolinecolor="#334155")
+    fig.update_yaxes(gridcolor="#243049", zerolinecolor="#334155")
     return fig
 
 
@@ -95,9 +110,16 @@ if f.empty:
 # --------------------------------------------------------------------------- #
 # Header + KPI cards (6 kartu)
 # --------------------------------------------------------------------------- #
-st.title("📊 Dashboard Analisis Penjualan Superstore")
-st.caption("Memahami produk, wilayah, dan diskon mana yang menggerakkan (atau menggerus) profit.")
-st.caption("👤 Dibuat oleh **Muhammad Alva Gustav Al-Fallah** · NIM 241041007 · Prodi Manajemen Informatika · UTS Visualisasi Data 2026/2027")
+st.markdown(
+    """
+    <div class="hero">
+      <div class="hero-title">📊 Dashboard Analisis Penjualan Superstore</div>
+      <div class="hero-sub">Memahami produk, wilayah, dan diskon mana yang menggerakkan (atau menggerus) profit.</div>
+      <div class="hero-by">👤 <b>Muhammad Alva Gustav Al-Fallah</b> · NIM 241041007 · Prodi Manajemen Informatika · UTS Visualisasi Data 2026/2027</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 total_sales, total_profit = f["Sales"].sum(), f["Profit"].sum()
 kpis = [
@@ -108,9 +130,12 @@ kpis = [
     ("👥 Jumlah Pelanggan", f"{f['Customer ID'].nunique():,}"),
     ("🏷️ Rata-rata Diskon", f"{f['Discount'].mean() * 100:.1f}%"),
 ]
-for col, (label, value) in zip(st.columns(len(kpis)), kpis):
-    with col.container(border=True):
-        st.metric(label, value)
+for col, (label, value), color in zip(st.columns(len(kpis)), kpis, KPI_COLORS):
+    col.markdown(
+        f"<div class='kpi' style='--c:{color}'><div class='kpi-label'>{label}</div>"
+        f"<div class='kpi-value'>{value}</div></div>",
+        unsafe_allow_html=True,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -171,7 +196,7 @@ with tab1:
         cat = f.groupby("Category", as_index=False)["Sales"].sum()
         fig = px.pie(cat, names="Category", values="Sales", hole=0.55, color="Category",
                      color_discrete_map=CAT_COLORS, title="Proporsi Penjualan per Kategori")
-        fig.update_traces(textinfo="percent+label")
+        fig.update_traces(textinfo="percent+label", marker=dict(line=dict(color="#0b1220", width=2)))
         fig.update_layout(showlegend=False)
         st.plotly_chart(style(fig), use_container_width=True)
 
@@ -213,7 +238,7 @@ with tab3:
         g = f.groupby(["Region", "Category"]).agg(S=("Sales", "sum"), P=("Profit", "sum")).reset_index()
         g["Margin"] = g["P"] / g["S"] * 100
         pivot = g.pivot(index="Region", columns="Category", values="Margin")
-        fig = px.imshow(pivot, text_auto=".1f", color_continuous_scale="RdYlGn",
+        fig = px.imshow(pivot, text_auto=".1f", color_continuous_scale=DIV_SCALE,
                         color_continuous_midpoint=0, aspect="auto",
                         title="Heatmap Margin Profit (%) — Wilayah × Kategori")
         fig.update_layout(coloraxis_colorbar_title="Margin %")
@@ -222,7 +247,7 @@ with tab3:
         st_ = f.groupby("State", as_index=False).agg(Sales=("Sales", "sum"), Profit=("Profit", "sum"))
         top = st_.nlargest(10, "Sales")
         fig = px.bar(top, x="Sales", y="State", orientation="h", color="Profit",
-                     color_continuous_scale="RdYlGn", color_continuous_midpoint=0,
+                     color_continuous_scale=DIV_SCALE, color_continuous_midpoint=0,
                      title="10 State dengan Penjualan Tertinggi (warna = profit)")
         fig.update_yaxes(categoryorder="total ascending", title="")
         fig.update_xaxes(title="Penjualan (USD)")
